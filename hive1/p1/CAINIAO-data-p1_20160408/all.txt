@@ -1,0 +1,45 @@
+create table item_feature_2015_last_2week as select * from item_feature where date >"20151213"; --最后两周的item的情况
+
+select count(*) from item_feature_2015_last_2week;
+
+select * from item_feature_2015_last_2week order by item_id limit 50;
+
+create table  item_amt_2015_last_2week  as select item_id ,"all" as store_code,sum(qty_alipay_njhs) as target from item_feature_2015_last_2week group by item_id;
+
+describe  item_amt_2015_last_2week;
+
+select count(*) from item_amt_2015_last_2week limit 20;
+select * from item_amt_2015_last_2week limit 20;
+
+create table  item_amt_2015_last_2week2  as select item_id , _c1 as target from item_amt_2015_last_2week ;
+
+create table item_feature_pre_var_avg2_2015_last_2week as select item_id, sum(qty_alipay_njhs) as qty_alipay_njhs_count,sum(amt_alipay_njhs) as amt_alipay_njhs_sum,avg(qty_alipay_njhs) as amt_alipay_njhs_avg,var_pop(qty_alipay_njhs) as amt_alipay_njhs_var_pop ,stddev_pop(qty_alipay_njhs) as amt_alipay_njhs_stddev_pop from item_feature_2015_last_2week group by item_id;--数据数量的方差
+
+
+
+select count(*) from item_feature_pre_var_avg2_2015_last_2week;
+
+select * from item_feature_pre_var_avg2_2015_last_2week  limit 50;
+
+--导出数据
+hive -e "select * from cainiao1.item_amt_2015_last_2week;" >>/home/hadoop/Desktop/天池/菜鸟需求预测和分仓规则/p1_20160408/item_amt_2015_last_2week.csv
+
+hive -e "select * from cainiao1.item_store1_2015_last_2week_amt_2015_last_2week;" >>/home/hadoop/Desktop/天池/菜鸟需求预测和分仓规则/p1_20160408/item_store1_2015_last_2week_amt_2015_last_2week.csv
+
+hive -e "select * from cainiao1.item_store1_2015_last_2week_amt_2015_last_2week;" >>/home/hadoop/Desktop/天池/菜鸟需求预测和分仓规则/p1_20160408/item_store1_2015_last_2week_amt_2015_last_2week.csv
+
+hive -e "select * from cainiao1.item_store2_2015_last_2week_amt_2015_last_2week;" >>/home/hadoop/Desktop/天池/菜鸟需求预测和分仓规则/p1_20160408/item_store2_2015_last_2week_amt_2015_last_2week.csv
+
+hive -e "select * from cainiao1.item_store3_2015_last_2week_amt_2015_last_2week;" >>/home/hadoop/Desktop/天池/菜鸟需求预测和分仓规则/p1_20160408/item_store3_2015_last_2week_amt_2015_last_2week.csv
+
+hive -e "select * from cainiao1.item_store4_2015_last_2week_amt_2015_last_2week;" >>/home/hadoop/Desktop/天池/菜鸟需求预测和分仓规则/p1_20160408/item_store4_2015_last_2week_amt_2015_last_2week.csv
+
+hive -e "select * from cainiao1.item_store5_2015_last_2week_amt_2015_last_2week;" >>/home/hadoop/Desktop/天池/菜鸟需求预测和分仓规则/p1_20160408/item_store5_2015_last_2week_amt_2015_last_2week.csv
+
+--linuxe命令，合并文件 
+cat item_amt_2015_last_2week.csv item_store1_2015_last_2week_amt_2015_last_2week.csv item_store2_2015_last_2week_amt_2015_last_2week.csv item_store3_2015_last_2week_amt_2015_last_2week.csv item_store4_2015_last_2week_amt_2015_last_2week.csv item_store5_2015_last_2week_amt_2015_last_2week.csv >>predict.csv
+
+:1,$s/^I/,/g
+
+
+/home/hadoop/Desktop/天池/菜鸟需求预测和分仓规则
