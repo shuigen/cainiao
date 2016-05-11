@@ -1,0 +1,611 @@
+set hive.cli.print.current.db=true;
+set hive.cli.print.header=true;
+use cainiao1;
+
+create table config(item_id STRING,store_code STRING,a_b STRING)ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' STORED AS TEXTFILE;
+
+create table item_feature( date STRING,item_id STRING,cate_id STRING,cate_level_id STRING,brand_id STRING,supplier_id STRING,pv_ipv Double,pv_uv Double,cart_ipv Double,cart_uv Double,collect_uv Double,num_gmv Double,amt_gmv Double,qty_gmv Double,unum_gmv Double,amt_alipay Double,num_alipay Double,qty_alipay Double,unum_alipay Double,ztc_pv_ipv Double,tbk_pv_ipv Double,ss_pv_ipv Double,jhs_pv_ipv Double,ztc_pv_uv Double,tbk_pv_uv Double,ss_pv_uv Double,jhs_pv_uv Double,num_alipay_njhs Double,amt_alipay_njhs Double,qty_alipay_njhs Double,unum_alipay_njhs Double)ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' STORED AS TEXTFILE;
+
+create table item_store_feature( date STRING,item_id STRING,store_code STRING,cate_id STRING,cate_level_id STRING,brand_id STRING,supplier_id STRING,pv_ipv Double,pv_uv Double,cart_ipv Double,cart_uv Double,collect_uv Double,num_gmv Double,amt_gmv Double,qty_gmv Double,unum_gmv Double,amt_alipay Double,num_alipay Double,qty_alipay Double,unum_alipay Double,ztc_pv_ipv Double,tbk_pv_ipv Double,ss_pv_ipv Double,jhs_pv_ipv Double,ztc_pv_uv Double,tbk_pv_uv Double,ss_pv_uv Double,jhs_pv_uv Double,num_alipay_njhs Double,amt_alipay_njhs Double,qty_alipay_njhs Double,unum_alipay_njhs Double)ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' STORED AS TEXTFILE;
+
+
+load data local inpath '/home/hadoop/Desktop/天池/菜鸟需求预测和分仓规则/p1_20160408/config1.csv' overwrite into table config; 
+
+load data local inpath '/home/hadoop/Desktop/天池/菜鸟需求预测和分仓规则/p1_20160408/item_feature1.csv' overwrite into table item_feature; 
+
+load data local inpath '/home/hadoop/Desktop/天池/菜鸟需求预测和分仓规则/p1_20160408/item_store_feature1.csv' overwrite into table item_store_feature; 
+
+create table count_per_date as select date , count(*) as count  from  item_feature group by date;
+
+select count(*) from item_feature;
+
+create table count_per_item_id as select item_id , count(*) as count  from  item_feature group by item_id;
+select count(*) from count_per_item_id;
+
+create table count_per_cate_id as select cate_id , count(*) as count  from  item_feature group by cate_id;
+select count(*) from count_per_cate_id;
+
+create table count_per_cate_level_id as select cate_level_id , count(*) as count  from  item_feature group by cate_level_id;
+select count(*) from count_per_cate_level_id;
+
+create table count_per_brand_id as select brand_id , count(*) as count  from  item_feature group by brand_id;
+select count(*) from count_per_brand_id;
+
+create table count_per_supplier_id as select supplier_id , count(*) as count  from  item_feature group by supplier_id;
+select count(*) from count_per_supplier_id;
+
+select date,item_id,cate_id,cate_level_id,brand_id,supplier_id,amt_alipay_njhs,qty_alipay_njhs from item_feature where item_id="300" order by date;
+
+create table qty_count_amt_per_item_id as select item_id,min(cate_id) as cate_id,min(cate_level_id) as cate_level_id,min(brand_id) as brand_id,sum(qty_alipay_njhs) as qty_alipay_njhs_count,sum(amt_alipay_njhs) as amt_alipay_njhs_sum from item_feature group by item_id;
+
+select * from qty_count_amt_per_item_id limit 20;
+
+select * from qty_count_amt_per_item_id  order by amt_alipay_njhs_sum limit 20;
+
+select * from qty_count_amt_per_item_id  order by qty_alipay_njhs_count limit 20;
+
+
+hive -e "select date,item_id,cate_id,cate_level_id,brand_id,supplier_id,amt_alipay_njhs,qty_alipay_njhs  from item_feature " >>/home/hadoop/Desktop/天池/菜鸟需求预测和分仓规则/p1_20160408/item_feature_item_id.csv
+
+create table config2 as select item_id,store_code,cast(split(a_b,'_')[0] as double) as fill_less,cast(split(a_b,'_')[1] as double) as fill_more from config;
+
+create table config3 as select item_id,store_code,fill_less,fill_more,(fill_less-fill_more) as difference, 
+case 
+when  fill_less>fill_more then (fill_less-fill_more)/fill_more
+when  fill_less<fill_more then (fill_more-fill_less)/fill_less
+else 0
+end as difference_percent from config2;
+
+create table config4 as select item_id,store_code,fill_less,fill_more, difference, difference_percent,difference_percent/2 as difference_percent2 from config3;
+
+select * from config3 limit 20;
+select count(*) from config3;
+create table config_all as select * from  config3 where store_code="all";
+create table config_1 as select * from  config3 where store_code="1";
+create table config_2 as select * from  config3 where store_code="2";
+create table config_3 as select * from  config3 where store_code="3";
+create table config_4 as select * from  config3 where store_code="4";
+create table config_5 as select * from  config3 where store_code="5";
+
+select percentile_approx(fill_less,array(0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,0.99)) from config3;
+
+select percentile_approx(fill_more,array(0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,0.99)) from config3;
+
+select histogram_numeric(fill_more,100) from config3;
+
+
+select explode(histogram_numeric(fill_more,100)) from config3;
+
+select explode(histogram_numeric(fill_more,100)) from config_all;
+select explode(histogram_numeric(fill_more,100)) from config_1;
+
+数据预处理
+
+create table item_feature_pre_var_avg as select item_id, sum(qty_alipay_njhs) as qty_alipay_njhs_count,sum(amt_alipay_njhs) as amt_alipay_njhs_sum,avg(amt_alipay_njhs) as amt_alipay_njhs_avg,var_pop(amt_alipay_njhs) as amt_alipay_njhs_var_pop from item_feature group by item_id;--数据价格的方差
+
+create table item_feature_pre_var_avg2 as select item_id, sum(qty_alipay_njhs) as qty_alipay_njhs_count,sum(amt_alipay_njhs) as amt_alipay_njhs_sum,avg(qty_alipay_njhs) as amt_alipay_njhs_avg,var_pop(qty_alipay_njhs) as amt_alipay_njhs_var_pop ,stddev_pop(qty_alipay_njhs) as amt_alipay_njhs_stddev_pop from item_feature group by item_id;--数据数量的方差
+
+select * from item_feature_pre_var_avg2 limit 20;
+
+select date,item_id,cate_id,cate_level_id,brand_id,supplier_id,amt_alipay_njhs,qty_alipay_njhs from item_feature where item_id="10325" order by date;
+
+select item_id,date,qty_alipay_njhs from item_feature where item_id="100015" and qty_alipay_njhs>1;
+
+select item_id,date,qty_alipay_njhs from item_feature where item_id="101615" and qty_alipay_njhs>120 order by date;
+
+select item_id,date,qty_alipay_njhs from item_feature where item_id="101615"  order by date;
+
+create table item_more_than_2stddev as select c.item_id,count(*) as count from (select b.item_id  from item_feature_pre_var_avg2 a join  item_feature b on a.item_id=b.item_id where b.qty_alipay_njhs>2*a.amt_alipay_njhs_stddev_pop) c group by c.item_id ; --数据项中支付件数大于标准差两倍的数据项有多少(也就是支付件数的异常值）
+
+select * from item_more_than_2stddev limit 20;
+
+select count(*) from item_more_than_2stddev where count>3;--支付件数的异常值大于3的记录数量
+
+select * from item_more_than_2stddev limit 20;
+
+create table count_per_item_more_than_2stddev as select count ,count(*) as count_per_count from item_more_than_2stddev group by count;----每个支付件数异常值大于3的记录数量的数量
+
+select * from count_per_item_more_than_2stddev;
+
+--item_id="103184"的商品
+select * from item_feature_pre_var_avg2 where item_id="103184";
+select date,item_id,cate_id,cate_level_id,brand_id,supplier_id,amt_alipay_njhs,qty_alipay_njhs from item_feature where item_id="103184" order by date;
+
+
+select item_id,date,qty_alipay_njhs from item_feature where item_id="103184" and qty_alipay_njhs>18 order by date;
+
+--异常值有156个item_id为5141的分析
+select * from item_more_than_2stddev where count=156;
+--item_id="5141"的商品
+
+select * from item_feature_pre_var_avg2 where item_id="5141";
+
+select date,item_id,cate_id,cate_level_id,brand_id,supplier_id,amt_alipay_njhs,qty_alipay_njhs from item_feature where item_id="5141" order by date;
+
+select item_id,date,qty_alipay_njhs from item_feature where item_id="5141" and qty_alipay_njhs>12 order by date;
+
+--异常值分析2
+create table item_more_than_2stddev2 as select c.item_id,count(*) as count from (select b.item_id  from item_feature_pre_var_avg2 a join  item_feature b on a.item_id=b.item_id where b.qty_alipay_njhs>amt_alipay_njhs_avg+2*a.amt_alipay_njhs_stddev_pop) c group by c.item_id ; --数据项中支付件数大于标准差两倍的数据项有多少(也就是支付件数的异常值）
+
+select * from item_more_than_2stddev2 limit 20;
+
+select count(*) from item_more_than_2stddev2 where count>3;--支付件数的异常值大于3的记录数量
+
+
+create table count_per_item_more_than_2stddev2 as select count ,count(*) as count_per_count from item_more_than_2stddev2 group by count;----每个支付件数异常值大于3的记录数量的数量
+
+select * from count_per_item_more_than_2stddev2;
+
+--异常值有53个item_id为5141的分析
+select * from item_more_than_2stddev where count=53;
+
+--item_id="103184"的商品
+select * from item_feature_pre_var_avg2 where item_id="103184";
+select date,item_id,cate_id,cate_level_id,brand_id,supplier_id,amt_alipay_njhs,qty_alipay_njhs from item_feature where item_id="103184" order by date;
+
+
+select item_id,date,qty_alipay_njhs from item_feature where item_id="103184" and qty_alipay_njhs>18 order by date;
+
+--异常值有53个item_id为25455的分析
+select * from item_more_than_2stddev2 where count=53;
+--item_id="25455"的商品的异常值分析
+
+select * from item_feature_pre_var_avg2 where item_id="25455";
+
+select date,item_id,cate_id,cate_level_id,brand_id,supplier_id,amt_alipay_njhs,qty_alipay_njhs from item_feature where item_id="25455" order by date;
+
+select item_id,date,qty_alipay_njhs from item_feature where item_id="25455" and qty_alipay_njhs>1 order by date;
+
+--异常值范围分析 
+--异常值数量在大于19的item分析
+create table item_count_more_than_19 as select * from item_more_than_2stddev2 where count>18;
+
+select * from item_count_more_than_19 order by count;
+
+select count(*) from item_count_more_than_19; --异常值多于19的item有70个
+
+create table item_count_more_than_19_info as select a.item_id,a.count, qty_alipay_njhs_count,amt_alipay_njhs_sum, amt_alipay_njhs_avg, amt_alipay_njhs_var_pop, amt_alipay_njhs_stddev_pop from item_count_more_than_19 a join item_feature_pre_var_avg2 b on a.item_id=b.item_id;--异常值多于19的item的详细信息
+
+select * from item_count_more_than_19_info order by count;
+
+
+--异常值有31个item_id为146679的分析
+select * from item_more_than_2stddev2 where count=31;
+--item_id="25455"的商品的异常值分析
+
+select * from item_feature_pre_var_avg2 where item_id="146679";
+
+select date,item_id,cate_id,cate_level_id,brand_id,supplier_id,amt_alipay_njhs,qty_alipay_njhs from item_feature where item_id="146679" order by date;
+
+select item_id,date,qty_alipay_njhs from item_feature where item_id="146679" and qty_alipay_njhs>90 order by date;
+
+--异常值分析3(去除方差加均值和小于1的情况）
+create table item_more_than_2stddev3 as select c.item_id,count(*) as count from (select b.item_id  from item_feature_pre_var_avg2 a join  item_feature b on a.item_id=b.item_id where b.qty_alipay_njhs>ceil(amt_alipay_njhs_avg+2*a.amt_alipay_njhs_stddev_pop)) c group by c.item_id ; --数据项中支付件数大于标准差两倍的数据项有多少(也就是支付件数的异常值）
+
+select * from item_more_than_2stddev3 limit 20;
+
+select count(*) from item_more_than_2stddev3 where count>3;--支付件数的异常值大于3的记录数量
+
+
+create table count_per_item_more_than_2stddev3 as select count ,count(*) as count_per_count from item_more_than_2stddev3 group by count;----每个支付件数异常值大于3的记录数量的数量
+
+select * from count_per_item_more_than_2stddev3;
+
+--异常值有30个item_id为146679的分析
+select * from item_more_than_2stddev3 where count=30;
+
+--item_id="146679"的商品
+select * from item_feature_pre_var_avg2 where item_id="146679";
+select date,item_id,cate_id,cate_level_id,brand_id,supplier_id,amt_alipay_njhs,qty_alipay_njhs from item_feature where item_id="146679" order by date;
+
+
+select item_id,date,qty_alipay_njhs from item_feature where item_id="146679" and qty_alipay_njhs>18 order by date;
+
+
+
+
+select date,item_id,cate_id,cate_level_id,brand_id,supplier_id,amt_alipay_njhs,qty_alipay_njhs from item_feature where item_id="146679" order by date;
+
+select item_id,date,qty_alipay_njhs from item_feature where item_id="146679" and qty_alipay_njhs>1 order by date;
+
+
+--异常值分析3(分析12月以来异常值的情况）
+create table item_more_than_2stddev4 as select c.item_id,count(*) as count from (select b.item_id  from item_feature_pre_var_avg2 a join  item_feature b on a.item_id=b.item_id where b.qty_alipay_njhs>ceil(amt_alipay_njhs_avg+2*a.amt_alipay_njhs_stddev_pop) and date>"20151200")  c group by c.item_id ; --数据项中支付件数大于标准差两倍的数据项有多少(也就是支付件数的异常值）
+
+select * from item_more_than_2stddev4 limit 20;
+
+select count(*) from item_more_than_2stddev4 where count>1;--支付件数的异常值大于3的记录数量
+
+
+create table count_per_item_more_than_2stddev4 as select count ,count(*) as count_per_count from item_more_than_2stddev4 group by count;----每个支付件数异常值大于3的记录数量的数量
+
+select * from count_per_item_more_than_2stddev4;
+
+--异常值有12个item_id为9574的分析
+select * from item_more_than_2stddev4 where count=12;
+
+--item_id="9574"的商品
+select * from item_feature_pre_var_avg2 where item_id="9574";
+select date,item_id,cate_id,cate_level_id,brand_id,supplier_id,amt_alipay_njhs,qty_alipay_njhs from item_feature where item_id="9574" order by date;
+
+
+select item_id,date,qty_alipay_njhs from item_feature where item_id="9574" and qty_alipay_njhs>18 order by date;
+
+
+
+
+select date,item_id,cate_id,cate_level_id,brand_id,supplier_id,amt_alipay_njhs,qty_alipay_njhs from item_feature where item_id="146679" order by date;
+
+select item_id,date,qty_alipay_njhs from item_feature where item_id="146679" and qty_alipay_njhs>1 order by date;
+
+--异常值范围分析 (1,2-4,more than 4)
+--异常值数量在大于4的item分析
+create table item_count4_more_than_4 as select * from item_more_than_2stddev4 where count>4;
+
+select * from item_count4_more_than_4 order by count;
+
+select count(*) from item_count4_more_than_4; --异常值多于4的item有15个
+
+create table item_count4_more_than_4_info as select a.item_id,a.count, qty_alipay_njhs_count,amt_alipay_njhs_sum, amt_alipay_njhs_avg, amt_alipay_njhs_var_pop, amt_alipay_njhs_stddev_pop from item_count4_more_than_4 a join item_feature_pre_var_avg2 b on a.item_id=b.item_id;--异常值多于5的item的详细信息
+
+select * from item_count4_more_than_4_info order by count;
+
+
+--异常值有5个item_id为91007的分析
+select date,item_id,cate_id,cate_level_id,brand_id,supplier_id,amt_alipay_njhs,qty_alipay_njhs from item_feature where item_id="91007" order by date;
+
+--异常值有5个item_id为121232的分析
+select date,item_id,cate_id,cate_level_id,brand_id,supplier_id,amt_alipay_njhs,qty_alipay_njhs from item_feature where item_id="121232" order by date;
+
+--异常值有6个item_id为99904的分析
+select date,item_id,cate_id,cate_level_id,brand_id,supplier_id,amt_alipay_njhs,qty_alipay_njhs from item_feature where item_id="99904" order by date;
+
+--异常值有8个item_id为78476的分析
+select date,item_id,cate_id,cate_level_id,brand_id,supplier_id,amt_alipay_njhs,qty_alipay_njhs from item_feature where item_id="78476" order by date;
+
+--异常值数量在大于4的item分析
+create table item_count4_more_than_4 as select * from item_more_than_2stddev4 where count>4;
+
+select * from item_count4_more_than_4 order by count;
+
+select count(*) from item_count4_more_than_4; --异常值多于4的item有15个
+
+create table item_count4_more_than_4_info as select a.item_id,a.count, qty_alipay_njhs_count,amt_alipay_njhs_sum, amt_alipay_njhs_avg, amt_alipay_njhs_var_pop, amt_alipay_njhs_stddev_pop from item_count4_more_than_4 a join item_feature_pre_var_avg2 b on a.item_id=b.item_id;--异常值多于5的item的详细信息
+
+select * from item_count4_more_than_4_info order by count;
+
+
+--异常值有5个item_id为91007的分析
+select date,item_id,cate_id,cate_level_id,brand_id,supplier_id,amt_alipay_njhs,qty_alipay_njhs from item_feature where item_id="91007" order by date;
+
+--异常值有5个item_id为121232的分析
+select date,item_id,cate_id,cate_level_id,brand_id,supplier_id,amt_alipay_njhs,qty_alipay_njhs from item_feature where item_id="121232" order by date;
+
+--异常值有6个item_id为99904的分析
+select date,item_id,cate_id,cate_level_id,brand_id,supplier_id,amt_alipay_njhs,qty_alipay_njhs from item_feature where item_id="99904" order by date;
+
+--异常值有8个item_id为78476的分析
+select date,item_id,cate_id,cate_level_id,brand_id,supplier_id,amt_alipay_njhs,qty_alipay_njhs from item_feature where item_id="78476" order by date;
+
+
+select item_id,date,qty_alipay_njhs from item_feature where item_id="146679" and qty_alipay_njhs>90 order by date;
+
+--补多补少对结果的影响
+create table item_feature_2015_last_2week_pre_var_avg2 as select item_id, sum(qty_alipay_njhs) as qty_alipay_njhs_count,sum(amt_alipay_njhs) as amt_alipay_njhs_sum,avg(qty_alipay_njhs) as amt_alipay_njhs_avg,var_pop(qty_alipay_njhs) as amt_alipay_njhs_var_pop ,stddev_pop(qty_alipay_njhs) as amt_alipay_njhs_stddev_pop from item_feature_2015_last_2week group by item_id;--数据数量的方差
+
+create table item_store1_feature_2015_last_2week_pre_var_avg2 as select item_id, sum(qty_alipay_njhs) as qty_alipay_njhs_count,sum(amt_alipay_njhs) as amt_alipay_njhs_sum,avg(qty_alipay_njhs) as amt_alipay_njhs_avg,var_pop(qty_alipay_njhs) as amt_alipay_njhs_var_pop ,stddev_pop(qty_alipay_njhs) as amt_alipay_njhs_stddev_pop from item_store1_feature_2015_last_2week group by item_id;
+
+create table item_store2_feature_2015_last_2week_pre_var_avg2 as select item_id, sum(qty_alipay_njhs) as qty_alipay_njhs_count,sum(amt_alipay_njhs) as amt_alipay_njhs_sum,avg(qty_alipay_njhs) as amt_alipay_njhs_avg,var_pop(qty_alipay_njhs) as amt_alipay_njhs_var_pop ,stddev_pop(qty_alipay_njhs) as amt_alipay_njhs_stddev_pop from item_store2_feature_2015_last_2week group by item_id;
+
+create table item_store3_feature_2015_last_2week_pre_var_avg2 as select item_id, sum(qty_alipay_njhs) as qty_alipay_njhs_count,sum(amt_alipay_njhs) as amt_alipay_njhs_sum,avg(qty_alipay_njhs) as amt_alipay_njhs_avg,var_pop(qty_alipay_njhs) as amt_alipay_njhs_var_pop ,stddev_pop(qty_alipay_njhs) as amt_alipay_njhs_stddev_pop from item_store3_feature_2015_last_2week group by item_id;
+
+create table item_store4_feature_2015_last_2week_pre_var_avg2 as select item_id, sum(qty_alipay_njhs) as qty_alipay_njhs_count,sum(amt_alipay_njhs) as amt_alipay_njhs_sum,avg(qty_alipay_njhs) as amt_alipay_njhs_avg,var_pop(qty_alipay_njhs) as amt_alipay_njhs_var_pop ,stddev_pop(qty_alipay_njhs) as amt_alipay_njhs_stddev_pop from item_store4_feature_2015_last_2week group by item_id;
+
+create table item_store5_feature_2015_last_2week_pre_var_avg2 as select item_id, sum(qty_alipay_njhs) as qty_alipay_njhs_count,sum(amt_alipay_njhs) as amt_alipay_njhs_sum,avg(qty_alipay_njhs) as amt_alipay_njhs_avg,var_pop(qty_alipay_njhs) as amt_alipay_njhs_var_pop ,stddev_pop(qty_alipay_njhs) as amt_alipay_njhs_stddev_pop from item_store5_feature_2015_last_2week group by item_id;
+
+--最后4周情况分析
+create table item_feature_2015_last_4week as select * from item_feature where date >"20151128"; --最后四周的item的情况
+
+select * from item_feature_2015_last_4week limit 20;
+
+create table item_feature_2015_last_4week_pre_var_avg2 as select item_id, sum(qty_alipay_njhs) as qty_alipay_njhs_count,sum(amt_alipay_njhs) as amt_alipay_njhs_sum,avg(qty_alipay_njhs) as amt_alipay_njhs_avg,var_pop(qty_alipay_njhs) as amt_alipay_njhs_var_pop ,stddev_pop(qty_alipay_njhs) as amt_alipay_njhs_stddev_pop from item_feature_2015_last_4week group by item_id;
+
+select * from item_feature_2015_last_4week_pre_var_avg2 limit 50;
+
+create table item_feature_2015_last_4week_more_than_2stddev as select c.item_id,count(*) as count from (select b.item_id  from item_feature_2015_last_4week_pre_var_avg2 a join  item_feature_2015_last_4week b on a.item_id=b.item_id where b.qty_alipay_njhs>ceil(amt_alipay_njhs_avg+2*a.amt_alipay_njhs_stddev_pop)) c group by c.item_id ;
+
+create table item_feature_2015_last_4week_del as select * from item_feature_2015_last_4week where date<>"20151212";
+
+--结果
+create table item_feature_2015_last_4week2 as select * from item_feature where date >"20151128"; 
+
+
+
+create table item_feature_2015_last_4week_del2 as select * from item_feature_2015_last_4week where date<>"20151212";
+
+create table  item_amt_2015_last_4week  as select item_id ,"all" as store_code,sum(qty_alipay_njhs)/2 as target from item_feature_2015_last_4week_del2 group by item_id;
+
+
+
+create table item_store1_feature_2015_last_4week as select * from item_store_feature where date >"20151128" and store_code="1"; 
+
+create table item_store1_feature_2015_last_4week_del as select * from item_store1_feature_2015_last_4week where date<>"20151212";
+
+create table  item_store1_amt_2015_last_4week  as select item_id ,"1" as store_code,sum(qty_alipay_njhs)/2 as target from item_store1_feature_2015_last_4week_del group by item_id;
+
+
+
+
+create table item_store2_feature_2015_last_4week as select * from item_store_feature where date >"20151128" and store_code="2"; 
+
+create table item_store2_feature_2015_last_4week_del as select * from item_store2_feature_2015_last_4week where date<>"20151212";
+
+create table  item_store2_amt_2015_last_4week  as select item_id ,"2" as store_code,sum(qty_alipay_njhs)/2 as target from item_store2_feature_2015_last_4week_del group by item_id;
+
+
+
+
+create table item_store3_feature_2015_last_4week as select * from item_store_feature where date >"20151128" and store_code="3"; 
+
+create table item_store3_feature_2015_last_4week_del as select * from item_store3_feature_2015_last_4week where date<>"20151212";
+
+create table  item_store3_amt_2015_last_4week  as select item_id ,"3" as store_code,sum(qty_alipay_njhs)/2 as target from item_store3_feature_2015_last_4week_del group by item_id;
+
+
+
+create table item_store4_feature_2015_last_4week as select * from item_store_feature where date >"20151128" and store_code="4"; 
+
+create table item_store4_feature_2015_last_4week_del as select * from item_store4_feature_2015_last_4week where date<>"20151212";
+
+create table  item_store4_amt_2015_last_4week  as select item_id ,"4" as store_code,sum(qty_alipay_njhs)/2 as target from item_store4_feature_2015_last_4week_del group by item_id;
+
+
+create table item_store5_feature_2015_last_4week as select * from item_store_feature where date >"20151128" and store_code="5"; 
+
+create table item_store5_feature_2015_last_4week_del as select * from item_store5_feature_2015_last_4week where date<>"20151212";
+
+create table  item_store5_amt_2015_last_4week  as select item_id ,"5" as store_code,sum(qty_alipay_njhs)/2 as target from item_store5_feature_2015_last_4week_del group by item_id;
+
+
+drop table item_store5_amt_2015_last_4week;
+drop table item_store4_amt_2015_last_4week;
+drop table item_store3_amt_2015_last_4week;
+drop table item_store2_amt_2015_last_4week;
+drop table item_store1_amt_2015_last_4week;
+
+--导出数据
+hive -e "select * from cainiao1.item_amt_2015_last_4week;" >>/home/hadoop/Desktop/天池/菜鸟需求预测和分仓规则/p1_20160408/item_amt_2015_last_4week.csv
+
+
+hive -e "select * from cainiao1.item_store1_amt_2015_last_4week;" >>/home/hadoop/Desktop/天池/菜鸟需求预测和分仓规则/p1_20160408/item_store1_amt_2015_last_4week.csv
+
+hive -e "select * from cainiao1.item_store2_amt_2015_last_4week;" >>/home/hadoop/Desktop/天池/菜鸟需求预测和分仓规则/p1_20160408/item_store2_amt_2015_last_4week.csv
+
+hive -e "select * from cainiao1.item_store3_amt_2015_last_4week;" >>/home/hadoop/Desktop/天池/菜鸟需求预测和分仓规则/p1_20160408/item_store3_amt_2015_last_4week.csv
+
+hive -e "select * from cainiao1.item_store4_amt_2015_last_4week;" >>/home/hadoop/Desktop/天池/菜鸟需求预测和分仓规则/p1_20160408/item_store4_amt_2015_last_4week.csv
+
+hive -e "select * from cainiao1.item_store5_amt_2015_last_4week;" >>/home/hadoop/Desktop/天池/菜鸟需求预测和分仓规则/p1_20160408/item_store5_amt_2015_last_4week.csv
+
+
+--linuxe命令，合并文件 
+cat item_amt_2015_last_4week.csv item_store5_amt_2015_last_4week.csv  item_store5_amt_2015_last_4week.csv  item_store5_amt_2015_last_4week.csv  item_store5_amt_2015_last_4week.csv  item_store5_amt_2015_last_4week.csv >>predict1.csv
+
+
+create table item_feature_2015_last_4week_del2 as select * from item_feature_2015_last_4week where date="20151212";
+
+create table item_feature_2015_last_4week_del as select b.item_id  from item_feature_2015_last_4week_pre_var_avg2 a join  item_feature_2015_last_4week b on a.item_id=b.item_id where b.qty_alipay_njhs>ceil(amt_alipay_njhs_avg+2*a.amt_alipay_njhs_stddev_pop)
+
+
+create table date as select  (cast(concat(substr(date,1,4),"-",substr(date,5,2),"-",substr(date,7,2)) as date)) as date from item_feature_2015_last_4week;
+
+
+--日期的处理
+create table date as select date from item_feature group by date;--得到数据日期跨度
+
+create table date1 as select date , (cast(weekofyear(cast(concat(substr(date,1,4),"-",substr(date,5,2),"-",substr(date,7,2)) as date)) as int)) as week ,
+substr(date,1,4)  as year from date;--得到每个日期的周数
+
+create table date2 as select date,case when week=1 then week+52 when year="2015" then week+52 else week end as week ,year from date1;
+
+create table store_feature_week as select  b.* ,a.week,a.year  from date2 a join item_feature b on a.date=b.date;
+
+create table item_feature_week_avg_dev as select item_id,week, sum(qty_alipay_njhs) as qty_alipay_njhs_count,sum(amt_alipay_njhs) as amt_alipay_njhs_sum,avg(qty_alipay_njhs) as qty_alipay_njhs_avg,var_pop(qty_alipay_njhs) as qty_alipay_njhs_var_pop ,stddev_pop(qty_alipay_njhs) as qty_alipay_njhs_stddev_pop from store_feature_week group by item_id,week;
+
+create table item_feature_week_avg_dev3 as select item_id,week, sum(qty_alipay_njhs) as qty_alipay_njhs_count,sum(amt_alipay_njhs) as amt_alipay_njhs_sum,avg(qty_alipay_njhs) as qty_alipay_njhs_avg,var_pop(qty_alipay_njhs) as qty_alipay_njhs_var_pop ,stddev_pop(qty_alipay_njhs) as qty_alipay_njhs_stddev_pop,percentile_approx(qty_alipay_njhs,0.5) as mediam,percentile_approx(qty_alipay_njhs,0.01) as min,percentile_approx(qty_alipay_njhs,0.99) as max from store_feature_week group by item_id,week;
+
+create table item_feature_week_avg_dev_dev as select item_id ,avg(qty_alipay_njhs_avg) as qty_alipay_njhs_avg_avg,stddev_pop(qty_alipay_njhs_stddev_pop) as qty_alipay_njhs_stddev_pop_stddev from item_feature_week_avg_dev2 group by item_id;
+
+select * from item_feature_week2_avg_dev_dev limit 20;
+
+select * from  predict limit 20;
+
+select * from config4 limit 20;
+
+create table config_predict as select a.item_id,a.store_code,fill_less,fill_more, difference, difference_percent,difference_percent2 ,qty_alipay_njhs_avg_avg,qty_alipay_njhs_stddev_pop_stddev ,
+difference_percent2*qty_alipay_njhs_stddev_pop_stddev as add from config4 a join item_feature_week2_avg_dev_dev b on a.item_id=b.item_id and a.store_code=b.store_code;
+
+
+create table predict_add_1 as select a.item_id,a.store_code,case when fill_less>fill_more then target + add 
+else target - add end as target from predict a left join config_predict b on
+a.item_id=b.item_id and a.store_code=b.store_code;
+
+select * from predict_add where target<0;
+
+
+create table predict_add1 as select a.item_id,a.store_code,case when fill_less>fill_more then target + add 
+else target - add end as target from predict1 a join config_predict b on
+a.item_id=b.item_id and a.store_code=b.store_code;
+
+select * from predict_add1 where target<0;
+
+create table predict_add_2 as select item_id,store_code,case when target<0 then 0 else target end as target from predict_add;
+
+create table predict_add1_1 as select item_id,store_code,case when target<0 then 0 else target end as target from predict_add1;
+
+select * from predict_add_2 where target<0;
+select * from predict_add1_1 where target<0;
+
+
+
+
+
+
+
+
+--合并所有仓库
+create table item_feature1 as select 
+date ,item_id ,"all" as store_code ,cate_id ,cate_level_id ,
+brand_id ,supplier_id ,pv_ipv ,pv_uv ,cart_ipv ,cart_uv ,
+collect_uv ,num_gmv ,amt_gmv ,qty_gmv ,unum_gmv ,
+amt_alipay ,num_alipay ,qty_alipay ,unum_alipay ,ztc_pv_ipv ,
+tbk_pv_ipv ,ss_pv_ipv ,jhs_pv_ipv ,ztc_pv_uv ,tbk_pv_uv ,ss_pv_uv ,
+jhs_pv_uv ,num_alipay_njhs ,amt_alipay_njhs ,qty_alipay_njhs ,
+unum_alipay_njhs  from item_feature;
+
+--合并全国表和分仓表
+create table item_store_feature2 as select c.* from (select * from item_feature1 a union all select * from item_store_feature ) c;
+
+
+create table store_feature_week2 as select  b.* ,a.week,a.year  from date2 a join item_store_feature2 b on a.date=b.date;
+
+--得到每周商品的标准差
+create table item_store_feature_week2_avg_dev as select item_id,week,store_code, sum(qty_alipay_njhs) as qty_alipay_njhs_count,sum(amt_alipay_njhs) as amt_alipay_njhs_sum,avg(qty_alipay_njhs) as qty_alipay_njhs_avg,var_pop(qty_alipay_njhs) as qty_alipay_njhs_var_pop ,stddev_pop(qty_alipay_njhs) as qty_alipay_njhs_stddev_pop,percentile_approx(qty_alipay_njhs,0.5) as mediam,percentile_approx(qty_alipay_njhs,0.01) as min,percentile_approx(qty_alipay_njhs,0.99) as max from store_feature_week2 group by item_id,store_code,week;
+
+create table item_feature_week2_avg_dev_dev as select item_id ,store_code,avg(qty_alipay_njhs_avg) as qty_alipay_njhs_avg_avg,stddev_pop(qty_alipay_njhs_stddev_pop) as qty_alipay_njhs_stddev_pop_stddev from item_store_feature_week2_avg_dev group by item_id,store_code;
+
+select * from item_feature_week2_avg_dev_dev limit 50;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+select item_id,week,qty_alipay_njhs from store_feature_week  where item_id="100015" order by item_id,week ;
+
+
+create table item_feature_2015_last_4week_del as select b.item_id  from item_feature_2015_last_4week_pre_var_avg2 a join  item_feature_2015_last_4week b on a.item_id=b.item_id where b.qty_alipay_njhs>ceil(amt_alipay_njhs_avg+2*a.amt_alipay_njhs_stddev_pop)
+
+
+
+
+
+select * from item_feature_2015_last_4week_more_than_2stddev limit 20;
+
+create table count_per_item_feature_2015_last_4week_more_than_2stddev as select count ,count(*) as count_per_count from item_feature_2015_last_4week_more_than_2stddev group by count;
+
+select * from count_per_item_feature_2015_last_4week_more_than_2stddev ;
+
+--异常值有3个item_id为135921的分析
+select * from item_feature_2015_last_4week_more_than_2stddev where count=3;
+
+--item_id="135921"的商品
+select * from item_feature_2015_last_4week_pre_var_avg2 where item_id="135921";
+
+select date,item_id,cate_id,cate_level_id,brand_id,supplier_id,amt_alipay_njhs,qty_alipay_njhs from item_feature_2015_last_4week where item_id="135921" order by date;
+
+
+select item_id,date,qty_alipay_njhs from item_feature where item_id="135921" and qty_alipay_njhs>18 order by date;
+
+select item_id,date,qty_alipay_njhs from item_feature where item_id="135921"  order by date;
+
+
+
+
+select date,item_id,cate_id,cate_level_id,brand_id,supplier_id,amt_alipay_njhs,qty_alipay_njhs from item_feature where item_id="146679" order by date;
+
+select item_id,date,qty_alipay_njhs from item_feature where item_id="146679" and qty_alipay_njhs>1 order by date;
+
+--异常值有3个item_id为28174的分析
+select * from item_feature_2015_last_4week_more_than_2stddev where count=3;
+
+--item_id="28174"的商品
+select * from item_feature_2015_last_4week_pre_var_avg2 where item_id="28174";
+
+select date,item_id,cate_id,cate_level_id,brand_id,supplier_id,amt_alipay_njhs,qty_alipay_njhs from item_feature_2015_last_4week where item_id="28174" order by date;
+
+
+select item_id,date,qty_alipay_njhs from item_feature where item_id="28174" and qty_alipay_njhs>18 order by date;
+
+select item_id,date,qty_alipay_njhs from item_feature where item_id="28174"  order by date;
+
+
+
+
+select date,item_id,cate_id,cate_level_id,brand_id,supplier_id,amt_alipay_njhs,qty_alipay_njhs from item_feature where item_id="146679" order by date;
+
+select item_id,date,qty_alipay_njhs from item_feature where item_id="146679" and qty_alipay_njhs>1 order by date;
+
+
+--异常值有2个item_id为28174的分析
+select * from item_feature_2015_last_4week_more_than_2stddev where count=2;
+
+--item_id="28174"的商品
+select * from item_feature_2015_last_4week_pre_var_avg2 where item_id="28174";
+
+select date,item_id,cate_id,cate_level_id,brand_id,supplier_id,amt_alipay_njhs,qty_alipay_njhs from item_feature_2015_last_4week where item_id="28174" order by date;
+
+
+select item_id,date,qty_alipay_njhs from item_feature where item_id="28174" and qty_alipay_njhs>18 order by date;
+
+select item_id,date,qty_alipay_njhs from item_feature where item_id="28174"  order by date;
+
+
+
+
+select date,item_id,cate_id,cate_level_id,brand_id,supplier_id,amt_alipay_njhs,qty_alipay_njhs from item_feature where item_id="146679" order by date;
+
+select item_id,date,qty_alipay_njhs from item_feature where item_id="146679" and qty_alipay_njhs>1 order by date;
+
+
+create table predict as
+select * from (select * from item_amt_2015_last_2week union all 
+select * from  item_store1_2015_last_2week_amt_2015_last_2week union all
+select * from  item_store2_2015_last_2week_amt_2015_last_2week union all
+select * from  item_store3_2015_last_2week_amt_2015_last_2week union all
+select * from  item_store4_2015_last_2week_amt_2015_last_2week union all
+select * from  item_store5_2015_last_2week_amt_2015_last_2week
+) a;
+
+cat item_amt_2015_last_4week.csv item_store5_amt_2015_last_4week.csv  item_store4_amt_2015_last_4week.csv  item_store3_amt_2015_last_4week.csv  item_store2_amt_2015_last_4week.csv  item_store1_amt_2015_last_4week.csv >>predict1.csv
+
+create table predict1 as
+select * from (select * from item_amt_2015_last_4week union all
+select * from item_store5_amt_2015_last_4week union all
+select * from item_store4_amt_2015_last_4week union all
+select * from item_store3_amt_2015_last_4week union all
+select * from item_store2_amt_2015_last_4week union all
+select * from item_store1_amt_2015_last_4week ) a;
+
+select store_code ,count(*) as count from predict1 group by store_code;
+select store_code ,sum(target) as count from predict1 group by store_code;
+select store_code ,sum(target) as count from predict group by store_code;
+select store_code ,sum(target) as count from predict_add1_1 group by store_code;
+select store_code ,sum(target) as count from predict_add_2 group by store_code;
+
+
+hive -e "select * from cainiao1.predict1;" >>/home/hadoop/Desktop/天池/菜鸟需求预测和分仓规则/p1_20160408/predict3.csv
+hive -e "select * from cainiao1.predict;" >>/home/hadoop/Desktop/天池/菜鸟需求预测和分仓规则/p1_20160408/predict4.csv
+
+
+hive -e "select * from cainiao1.predict_add1_1;" >>/home/hadoop/Desktop/天池/菜鸟需求预测和分仓规则/p1_20160408/predict_add1.csv
+
+hive -e "select * from cainiao1.predict_add_2;" >>/home/hadoop/Desktop/天池/菜鸟需求预测和分仓规则/p1_20160408/predict_add.csv
+
+
+
+
