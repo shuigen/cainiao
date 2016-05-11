@@ -1,0 +1,11 @@
+create table item_store3_feature_2015_last_2week as select * from item_store_feature where date >"20151213" and store_code="3"; --最后两周的item的情况
+
+select count(*) from item_store3_feature_2015_last_2week;
+
+
+create table  item_store3_2015_last_2week_amt_2015_last_2week  as select item_id ,"3" as store_code,sum(qty_alipay_njhs) as target from item_store3_feature_2015_last_2week group by item_id;
+
+
+select count(*) from item_store3_2015_last_2week_amt_2015_last_2week;
+select * from item_store3_2015_last_2week_amt_2015_last_2week limit 20;
+  
