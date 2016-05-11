@@ -1,0 +1,97 @@
+set hive.cli.print.current.db=true;
+set hive.cli.print.header=true;
+ #create database cainiao2;
+use cainiao2;
+
+#载入数据和创建表格
+create table config(item_id STRING,store_code STRING,a_b STRING)ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' STORED AS TEXTFILE;
+
+create table item_feature( date STRING,item_id STRING,cate_id STRING,cate_level_id STRING,brand_id STRING,supplier_id STRING,pv_ipv Double,pv_uv Double,cart_ipv Double,cart_uv Double,collect_uv Double,num_gmv Double,amt_gmv Double,qty_gmv Double,unum_gmv Double,amt_alipay Double,num_alipay Double,qty_alipay Double,unum_alipay Double,ztc_pv_ipv Double,tbk_pv_ipv Double,ss_pv_ipv Double,jhs_pv_ipv Double,ztc_pv_uv Double,tbk_pv_uv Double,ss_pv_uv Double,jhs_pv_uv Double,num_alipay_njhs Double,amt_alipay_njhs Double,qty_alipay_njhs Double,unum_alipay_njhs Double)ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' STORED AS TEXTFILE;
+
+create table item_store_feature( date STRING,item_id STRING,store_code STRING,cate_id STRING,cate_level_id STRING,brand_id STRING,supplier_id STRING,pv_ipv Double,pv_uv Double,cart_ipv Double,cart_uv Double,collect_uv Double,num_gmv Double,amt_gmv Double,qty_gmv Double,unum_gmv Double,amt_alipay Double,num_alipay Double,qty_alipay Double,unum_alipay Double,ztc_pv_ipv Double,tbk_pv_ipv Double,ss_pv_ipv Double,jhs_pv_ipv Double,ztc_pv_uv Double,tbk_pv_uv Double,ss_pv_uv Double,jhs_pv_uv Double,num_alipay_njhs Double,amt_alipay_njhs Double,qty_alipay_njhs Double,unum_alipay_njhs Double)ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' STORED AS TEXTFILE;
+
+load data local inpath '/home/hadoop/Desktop/天池/菜鸟需求预测和分仓规则/p2_20160509/config2.csv' overwrite into table config; 
+
+load data local inpath '/home/hadoop/Desktop/天池/菜鸟需求预测和分仓规则/p2_20160509/item_feature2.csv' overwrite into table item_feature; 
+
+load data local inpath '/home/hadoop/Desktop/天池/菜鸟需求预测和分仓规则/p2_20160509/item_store_feature2.csv' overwrite into table item_store_feature; 
+
+select * from config;
+select * from item_feature limit 20;
+select * from item_store_feature limit 20;
+
+select count(*) from config;
+select count(*) from item_feature limit 20;
+select count(*) from item_store_feature limit 20;
+
+#congfig的变化
+create table config2 as select item_id,store_code,cast(split(a_b,'_')[0] as double) as fill_less,cast(split(a_b,'_')[1] as double) as fill_more from config;
+
+create table config3 as select item_id,store_code,fill_less,fill_more,(fill_less-fill_more) as difference, 
+case 
+when  fill_less>fill_more then (fill_less-fill_more)/fill_more
+when  fill_less<fill_more then (fill_more-fill_less)/fill_less
+else 0
+end as difference_percent from config2;
+
+create table config4 as select item_id,store_code,fill_less,fill_more, difference, difference_percent,difference_percent/2 as difference_percent2 from config3;
+
+select * from config3 limit 20;
+select count(*) from config3;
+
+
+--合并所有仓库
+create table item_feature1 as select 
+date ,item_id ,"all" as store_code ,cate_id ,cate_level_id ,
+brand_id ,supplier_id ,pv_ipv ,pv_uv ,cart_ipv ,cart_uv ,
+collect_uv ,num_gmv ,amt_gmv ,qty_gmv ,unum_gmv ,
+amt_alipay ,num_alipay ,qty_alipay ,unum_alipay ,ztc_pv_ipv ,
+tbk_pv_ipv ,ss_pv_ipv ,jhs_pv_ipv ,ztc_pv_uv ,tbk_pv_uv ,ss_pv_uv ,
+jhs_pv_uv ,num_alipay_njhs ,amt_alipay_njhs ,qty_alipay_njhs ,
+unum_alipay_njhs  from item_feature;
+
+--合并全国表和分仓表
+create table item_store_feature2 as select c.* from (select * from item_feature1 a union all select * from item_store_feature ) c;
+
+#最后两周每种商品的销售额
+create table item_store_feature_amt_2015_last_2week  as select item_id , store_code,sum(qty_alipay_njhs) as target from  item_store_feature2 where date >"20151213" group by store_code,item_id;
+
+#求方差
+create table item_store_feature_2015_last_2week_pre_var_avg as select store_code,item_id, sum(qty_alipay_njhs) as qty_alipay_njhs_count,sum(amt_alipay_njhs) as amt_alipay_njhs_sum,avg(qty_alipay_njhs) as qty_alipay_njhs_avg,var_pop(qty_alipay_njhs) as qty_alipay_njhs_var_pop ,stddev_pop(qty_alipay_njhs) as qty_alipay_njhs_stddev_pop from item_store_feature2 group by store_code,item_id;
+
+--日期的处理
+create table date as select date from item_feature group by date;--得到数据日期跨度
+
+create table date1 as select date , (cast(weekofyear(cast(concat(substr(date,1,4),"-",substr(date,5,2),"-",substr(date,7,2)) as date)) as int)) as week ,
+substr(date,1,4)  as year from date;--得到每个日期的周数
+
+create table date2 as select date,case when week=1 then week+52 when year="2015" then week+52 else week end as week ,year from date1;
+
+--得到每周商品的标准差
+create table store_feature_week2 as select  b.* ,a.week,a.year  from date2 a join item_store_feature2 b on a.date=b.date;
+
+create table item_store_feature_week2_avg_dev as select item_id,week,store_code, sum(qty_alipay_njhs) as qty_alipay_njhs_count,sum(amt_alipay_njhs) as amt_alipay_njhs_sum,avg(qty_alipay_njhs) as qty_alipay_njhs_avg,var_pop(qty_alipay_njhs) as qty_alipay_njhs_var_pop ,stddev_pop(qty_alipay_njhs) as qty_alipay_njhs_stddev_pop,percentile_approx(qty_alipay_njhs,0.5) as mediam,percentile_approx(qty_alipay_njhs,0.01) as min,percentile_approx(qty_alipay_njhs,0.99) as max from store_feature_week2 group by item_id,store_code,week;
+
+
+
+create table item_feature_week2_avg_dev_dev as select item_id ,store_code,avg(qty_alipay_njhs_avg) as qty_alipay_njhs_avg_avg,stddev_pop(qty_alipay_njhs_stddev_pop) as qty_alipay_njhs_stddev_pop_stddev from item_store_feature_week2_avg_dev group by item_id,store_code;
+
+create table config_predict as select a.item_id,a.store_code,fill_less,fill_more, difference, difference_percent,difference_percent2 ,qty_alipay_njhs_avg_avg,qty_alipay_njhs_stddev_pop_stddev ,
+difference_percent2*qty_alipay_njhs_stddev_pop_stddev as add from config4 a join item_feature_week2_avg_dev_dev b on a.item_id=b.item_id and a.store_code=b.store_code;
+
+create table predict as select * from item_store_feature_amt_2015_last_2week;
+
+create table predict_add_1 as select a.item_id,a.store_code,case when fill_less>fill_more then target + add 
+else target - add end as target from predict a left join config_predict b on
+a.item_id=b.item_id and a.store_code=b.store_code;
+
+create table predict_add1_1 as select item_id,store_code,case when target<0 then 0 else target end as target from predict_add_1;
+
+hive -e "select * from cainiao2.predict_add1_1;" >>/home/hadoop/Desktop/天池/菜鸟需求预测和分仓规则/p2_20160509/predict1.csv
+
+select store_code ,sum(target) from cainiao2.predict_add1_1 group by store_code;
+
+
+hive -e "select * from cainiao2.item_store_feature_amt_2015_last_2week;" >>/home/hadoop/Desktop/天池/菜鸟需求预测和分仓规则/p2_20160509/predict.csv
+
+select store_code ,sum(target) from cainiao2.item_store_feature_amt_2015_last_2week group by store_code;
